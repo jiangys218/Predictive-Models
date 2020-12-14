@@ -1,0 +1,191 @@
+---
+title: "DM Assignment 4"
+author: "Yunshuang Jiang"
+date: "2/10/2020"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Part 1\
+
+1. Save train and holdout samples\
+
+```{r}
+library(caret)
+data("GermanCredit")
+set.seed(101)
+train.index <- sample(1:nrow(GermanCredit), size = 0.7 * nrow(GermanCredit))
+train <- GermanCredit[train.index, ]
+holdout <- GermanCredit[-train.index, ]
+```
+&nbsp;
+&nbsp;
+
+2 & 3. Build logistic regression model.\
+
+```{r}
+glm.all <- glm(train$Class~., data=train, family=binomial(link=logit))
+#step(glm.all)
+#based on the step function, we select the model with the lowest AIC
+glm.fit <- glm(formula = train$Class ~ Duration + Amount + InstallmentRatePercentage + 
+    Age + NumberExistingCredits + ForeignWorker + CheckingAccountStatus.lt.0 + 
+    CheckingAccountStatus.0.to.200 + CheckingAccountStatus.gt.200 + 
+    CreditHistory.NoCredit.AllPaid + CreditHistory.ThisBank.AllPaid + 
+    CreditHistory.PaidDuly + CreditHistory.Delay + Purpose.NewCar + 
+    Purpose.Furniture.Equipment + Purpose.Radio.Television + 
+    Purpose.Repairs + Purpose.Education + Purpose.Business + 
+    SavingsAccountBonds.lt.100 + SavingsAccountBonds.100.to.500 + 
+    SavingsAccountBonds.500.to.1000 + EmploymentDuration.1.to.4 + 
+    EmploymentDuration.4.to.7 + EmploymentDuration.gt.7 + Personal.Female.NotSingle + 
+    OtherInstallmentPlans.Bank, family = binomial(link = logit), 
+    data = train)
+
+glm.fit$aic
+```
+
+&nbsp;
+&nbsp;
+
+4. Confusion matrix.\
+
+```{r}
+glm.fit.pred <- glm.fit$fitted.values
+glm.fit.pred[glm.fit.pred >= 0.5] = 1
+glm.fit.pred[glm.fit.pred < 0.5] = 0
+
+cm = confusionMatrix(data=as.factor(as.integer(glm.fit.pred)), as.factor(as.integer(train$Class)-1))
+cm
+```
+
+Conclusion: From the confusion matrix, the pruned tree model has an accuracy rate of 79.57%. More specifically, it has a false negative percentage of (51)/(51+114) = 30.9% and false positive of (92)/(443+92) = 17.2%. Overall, the model is decent in term of accuracy validation.\
+&nbsp;
+&nbsp;
+
+5.a. Perform Holdout testing and generate confusion matrix.\
+
+```{r}
+glm.fit.holdout <- predict(glm.fit, newdata = holdout, type = "response")
+
+glm.fit.holdout[glm.fit.holdout >= 0.5] = 1
+glm.fit.holdout[glm.fit.holdout < 0.5] = 0
+
+cm.holdout = confusionMatrix(data=as.factor(as.integer(glm.fit.holdout)), as.factor(as.integer(holdout$Class)-1))
+cm.holdout
+```
+
+Conclusion: From the confusion matrix, the pruned tree model has an accuracy rate of 72.67%. More specifically, it has a false negative percentage of (25)/(25+37) = 40.3% and false positive of (57)/(57+181) = 23.9%. Overall, the holdout accuracy rate is lower compared to train accuracy rate, but it is reasonable due to smaller sample size as compare to train sample size.\
+&nbsp;
+&nbsp;
+
+5.b. Generate the Lift Charts and AUROC Curves.\
+
+```{r}
+require(gains) 
+glm.holdout <- glm(formula = Class ~ Duration + Amount + InstallmentRatePercentage + 
+    Age + NumberExistingCredits + ForeignWorker + CheckingAccountStatus.lt.0 + 
+    CheckingAccountStatus.0.to.200 + CheckingAccountStatus.gt.200 + 
+    CreditHistory.NoCredit.AllPaid + CreditHistory.ThisBank.AllPaid + 
+    CreditHistory.PaidDuly + CreditHistory.Delay + Purpose.NewCar + 
+    Purpose.Furniture.Equipment + Purpose.Radio.Television + 
+    Purpose.Repairs + Purpose.Education + Purpose.Business + 
+    SavingsAccountBonds.lt.100 + SavingsAccountBonds.100.to.500 + 
+    SavingsAccountBonds.500.to.1000 + EmploymentDuration.1.to.4 + 
+    EmploymentDuration.4.to.7 + EmploymentDuration.gt.7 + Personal.Female.NotSingle + 
+    OtherInstallmentPlans.Bank, family = binomial(link = logit), 
+    data = holdout)
+holdout.fit=glm.holdout$fitted.values
+gains(as.numeric(holdout$Class)-1,holdout.fit,10)
+plot(gains(as.numeric(holdout$Class)-1,holdout.fit,10))
+
+library(AUC) 
+plot(roc(holdout.fit,holdout$Class))
+
+```
+&nbsp;
+&nbsp;
+&nbsp;
+&nbsp;
+&nbsp;
+&nbsp;
+
+Part 2.\
+&nbsp;
+&nbsp;
+
+1. Build a tree model using rpart with cost complexity parameter = 0, node size split = 30, fold cross validation = 10.\
+
+```{r}
+library(rpart)
+tree <- rpart(formula = train$Class ~ Duration + Amount + InstallmentRatePercentage + 
+    Age + NumberExistingCredits + ForeignWorker + CheckingAccountStatus.lt.0 + 
+    CheckingAccountStatus.0.to.200 + CheckingAccountStatus.gt.200 + 
+    CreditHistory.NoCredit.AllPaid + CreditHistory.ThisBank.AllPaid + 
+    CreditHistory.PaidDuly + CreditHistory.Delay + Purpose.NewCar + 
+    Purpose.Furniture.Equipment + Purpose.Radio.Television + 
+    Purpose.Repairs + Purpose.Education + Purpose.Business + 
+    SavingsAccountBonds.lt.100 + SavingsAccountBonds.100.to.500 + 
+    SavingsAccountBonds.500.to.1000 + EmploymentDuration.1.to.4 + 
+    EmploymentDuration.4.to.7 + EmploymentDuration.gt.7 + Personal.Female.NotSingle + 
+    OtherInstallmentPlans.Bank, data = train, 
+    control = rpart.control(cp = 0, minsplit = 30, xval = 10))
+
+```
+&nbsp;
+&nbsp;
+
+2. Evaluate the complexity parameter plots and prints.\
+
+```{r}
+plotcp(tree)
+printcp(tree)
+plot(tree, main="Tree with cp = 0",uniform=TRUE)
+text(tree, cex=0.6, use.n=TRUE)
+
+#From complexity parameter plots, cp = 0.0086 results in the smallest cv error.
+tree.prune <- prune(tree, cp = 0.0086)
+plot(tree.prune, main="Tree with cp = 0.0086", uniform=TRUE)
+text(tree.prune, cex=0.6, use.n=TRUE)
+```
+
+Comment: After we pruned the tree, we can see a slightly reduce in the end node of the right side of the tree (4 end nodes instead of 7).\
+&nbsp;
+&nbsp;
+
+3.  Generate confusion matrix for this pruned tree.\
+
+```{r}
+table(pred.class = predict(tree.prune, type = "class"), 
+      real.class = train[, "Class"] )
+```
+
+Conclusion: From the confusion matrix, the pruned tree model has an accuracy rate of (113+452)/(113+452+42+93) = 80.7%. More specifically, it has a false negative percentage of (93)/(93+452) = 17% and false positive of (42)/(113+42) = 27%. Overall, the model is decent in term of accuracy validation.\
+&nbsp;
+&nbsp;
+
+3.a. How many interaction do you see?\
+Answer: In the prune tree, I see 17 interactions.\
+
+3.b. Can you interpret the tree? Do you like it? Comment.\
+Answer: I can interpret the tree by following each branches and see how one data get classify to one branch for prediction. After pruning the model, we get a simplier tree model. Hence, I like this solution.\
+
+&nbsp;
+&nbsp;
+
+4. Perform holdout testing.
+
+```{r}
+table(pred.class = predict(tree.prune, type = "class", newdata = holdout), 
+      real.class = holdout[, "Class"] )
+```
+
+Conclusion: From the confusion matrix, the pruned tree model has an accuracy rate of (38+185)/(38+185+21+56) = 74.3%. More specifically, it has a false negative percentage of (56)/(56+185) = 23.24% and false positive of (38)/(38+21) = 64.4%. Overall, the holdout accuracy rate is decent as holdout sample size is smaller than training sample size. However, we notice that it has a large false positive rate of 64%.\
+&nbsp;
+&nbsp;
+
+5. Comparision between tree model and logistic model.\
+Conclusion: In terms of training dataset, both tree model and logistic model have high accuracy rate of around 80% and reasonable false negative and false positive rate. However, as for holdout dataset, logistic model has a slightly higher accuracy rate and a better false negative and false positive rate as compare to tree model. Hence, I would recommend logistic model in this case.
+
+

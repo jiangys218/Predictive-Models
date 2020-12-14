@@ -1,0 +1,217 @@
+---
+title: "DM Assignment 1"
+author: "Yunshuang Jiang"
+date: "1/10/2020"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Load Data.\
+```{r}
+library(caret)
+data(GermanCredit)
+data = GermanCredit
+
+#Convert dummy field variables into one interger column
+
+# 4 columns for Checking Account Balance: 0, 0 to 200, greater than 200, and None
+data$AccountBalance= apply(data[11:14], 1, function(x) {
+  names(x)[as.logical(as.numeric(as.character(x)))]})
+data$AccountBalance= as.integer(as.factor(data$AccountBalance))
+
+# 5 columns for credit history: NoCredit.AllPaid, ThisBank.AllPaid, PaidDuly, Delay, Critical
+data$CreditHistory = apply(data[,15:19], 1, function(x){
+  names(x)[as.logical(as.numeric(as.character(x)))]})
+data$CreditHistory = as.integer(as.factor(data$CreditHistory))
+
+# 11 columns for purpose
+purpose_mapping = c("Purpose.NewCar"= 1, "Purpose.UsedCar"= 2, "Purpose.Furniture.Equipment"= 3,
+                    "Purpose.Radio.Television"= 4, "Purpose.DomesticAppliance"= 5,
+                    "Purpose.Repairs" = 6, "Purpose.Education" = 7,  "Purpose.Vacation"= 8,
+                    "Purpose.Retraining"= 9, "Purpose.Business"= 10, "Purpose.Other"= 11)
+data$Purpose = apply(data[20:30], 1, function(x) {
+names(x)[as.logical(as.numeric(as.character(x)))]})
+data$Purpose = purpose_mapping[as.integer(as.factor(data$Purpose))]
+
+# 4 columns for SavingsAccountBonds
+data$SavingsAccountBonds= apply(data[31:35], 1, function(x) {
+names(x)[as.logical(as.numeric(as.character(x)))]})
+data$SavingsAccountBonds= as.integer(as.factor(data$SavingsAccountBonds))
+
+# 5 columns of Employment Duration
+data$EmploymentDuration = apply(data[36:40], 1, function(x) {
+names(x)[as.logical(as.numeric(as.character(x)))]})
+data$EmploymentDuration = as.integer(as.factor(data$EmploymentDuration))
+
+#delete columns thats have been categorized
+data = data[,-c(11:40)]
+
+#5 columns for personal information
+data$Personal = apply(data[11:15], 1, function(x) {
+  names(x)[as.logical(as.numeric(as.character(x)))]})
+data$Personal = as.integer(as.factor(data$Personal))
+
+#3 columns for other debtors guarantors
+data$OtherDebtorsGuarantors = apply(data[16:18], 1, function(x) {
+  names(x)[as.logical(as.numeric(as.character(x)))]})
+data$OtherDebtorsGuarantors = as.integer(as.factor(data$OtherDebtorsGuarantors))
+
+#4 columns for Property
+data$Property = apply(data[19:22], 1, function(x) {
+  names(x)[as.logical(as.numeric(as.character(x)))]})
+data$Property = as.integer(as.factor(data$Property))
+
+#3 columns for OtherInstallmentPlans
+data$OtherInstallmentPlans = apply(data[23:25], 1, function(x) {
+  names(x)[as.logical(as.numeric(as.character(x)))]})
+data$OtherInstallmentPlans = as.integer(as.factor(data$OtherInstallmentPlans))
+
+#3 columns for Housing
+data$Housing = apply(data[26:28], 1, function(x) {
+  names(x)[as.logical(as.numeric(as.character(x)))]})
+data$Housing = as.integer(as.factor(data$Housing))
+
+#4 columns for Job
+data$Job = apply(data[29:32], 1, function(x) {
+  names(x)[as.logical(as.numeric(as.character(x)))]})
+data$Job = as.integer(as.factor(data$Job))
+
+#delete columns thats have been categorized
+data = data[,-c(11:32)]
+```
+
+&nbsp;
+&nbsp;
+Build a linear model to predict Amount using the entire sample.\
+```{r}
+lm.all <- glm(data$Amount~., data=data)
+```
+
+&nbsp;
+&nbsp;
+Find the best regression model using step function.\
+```{r}
+#step <- step(lm.all, direction="both")
+#step$anova
+
+#Final Model based on AIC 
+lm.final = lm(data$Amount ~ Duration + InstallmentRatePercentage + Age + Telephone + 
+    Class + Purpose + SavingsAccountBonds + Personal + OtherDebtorsGuarantors + 
+    Job, data= data)
+summary(lm.final)
+
+```
+
+&nbsp;
+&nbsp;
+Run best model for 1000 times and save results.\
+```{r}
+require(caTools)
+set.seed(101) 
+sample <- replicate(1000, sample(1:1000, size = 0.632*1000))
+result <- data.frame(matrix(ncol = 14, nrow = 1000))
+
+for (i in 1:1000) {
+  training <- data[sample[,i], ]
+  testing <- data[-sample[,i], ]
+  
+  lmtrain <- lm(Amount ~ Duration + InstallmentRatePercentage + Age + Telephone + Class + 
+                Purpose + SavingsAccountBonds + Personal + OtherDebtorsGuarantors + Job, 
+                data = training)
+  
+  coef.train <- lmtrain$coefficients
+  rsquared.train <- summary(lmtrain)$r.squared
+  
+  pred.test <- predict(lmtrain, testing)
+  rsquared.test <- cor(testing["Amount"], pred.test)^2
+  percent.r.fall <-(rsquared.train-rsquared.test) /rsquared.train
+
+  sampledat <- c(coef.train, rsquared.train, rsquared.test, percent.r.fall)
+  result[i,] <- t(sampledat)
+}
+
+data.frame("rsquared.train"=result[,12],"rsquared.test"=result[,13],
+           "rsquared.percentage.fall"=result[,14])
+```
+
+&nbsp;
+&nbsp;
+Plots coefficients, r-square for train and holdout, percentage of rsquare fall. Interpret.\ 
+```{r}
+par(mfrow = c(3, 3))
+hist(result[,1], main ="Duration")
+hist(result[,2], main ="InstallmentRatePercentage")
+hist(result[,3], main ="Age")
+
+par(mfrow = c(3, 3))
+hist(result[,12], main ="rsquared.training")
+hist(result[,13], main ="rsquared.testing")
+hist(result[,14], main ="percent.rsqured.fall")
+
+```
+
+Interpret: All the coefficients, r-square for train and holdout, percentage of rsquare fall ploted looks like normal distribution, which make sense since we repeated the model using different training and testing set for 1000 times.\
+
+
+&nbsp;
+&nbsp;
+
+Calculate the mean of each coefficient.\
+Calculate the standard deviation of each coefficient.\
+Compare the means of the 1000 coefficients to the coefficients from the model created using the entire sample. Show the percentage difference.\
+```{r}
+coefmean <- apply(result[,1:11], 2, mean)
+coefsd <- apply(result[,1:11], 2, sd)
+coefdiff <- (lm.final$coefficients- coefmean)/lm.final$coefficients
+
+data.frame(lm.final$coefficients, coefmean, coefdiff)
+```
+
+&nbsp;
+&nbsp;
+Calculate CI for each coefficient from the repeated sample model.\
+Calculate the width of the CI as upper.bound - lower.bound*sqrt(.632).\
+```{r}
+CI.upper <- c()
+CI.lower <- c()
+for (i in 1:11){
+  CI.upper[i] <- coefmean[i] + qnorm(0.975)*coefsd[i]/sqrt(1000)
+  CI.lower[i] <- coefmean[i] - qnorm(0.975)*coefsd[i]/sqrt(1000)
+}
+
+CI.repeated <- data.frame("CI.Upper" = CI.upper, "CI.Lower" = CI.lower,
+                          "CI.Scaled.Width" = (CI.upper-CI.lower)*sqrt(0.632))
+CI.repeated
+```
+
+&nbsp;
+&nbsp;
+Calculate CI for full model using confint function.\
+Calculate width as Upper.bound - lower.bound.\
+```{r}
+CI.all <- confint(lm.final, c("(Intercept)", "Duration", "InstallmentRatePercentage",
+                             "Age", "Telephone", "ClassGood","Purpose",
+                            "SavingsAccountBonds", "Personal",
+                            "OtherDebtorsGuarantors", "Job"))
+CI.all <- data.frame(CI.all, Width = (CI.all[,2]-CI.all[,1]))
+CI.all
+```
+
+&nbsp;
+&nbsp;
+Calculate how many of the repeated sample CI’s are tighter or broader than the full model CI’s. If the width is smaller, the CI is tighter. If the width is bigger, the CI is broader.\
+```{r}
+tighter <- sum(CI.repeated[,3] < CI.all[,3])
+broader <- sum(CI.repeated[,3] > CI.all[,3])
+tighter
+broader
+```
+
+
+Interpret results. How did the means compare? How about the confidence intervals, how many were tighter or broader? What does this say about each method? What if we tried doing 10,000 samples?
+&nbsp;
+
+Answer: The coefficient means for the repeated samples are very similar to the coefficients of the full model, which make sense since the as we repeated our model for 1000 times, we are expected to see the repeated coefficient means get closer to the coefficient of the full model. All of the repeated sample CI's are tighter than the full model CI's because we repeated the model for 1000 times. If we try to do 10,000 samples, the repeated coefficient means will be closer to the coefficient of the full model, and the repeated sample CI's will have tighter width.\ 

@@ -1,0 +1,138 @@
+---
+title: "DM Assignment 2"
+author: "Yunshuang Jiang"
+date: "1/18/2020"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+#1 select numeric variables
+```{r}
+library(caret)
+data(GermanCredit)
+# I selected variables: Duration, InstallmentRatePercentage, Telephone, Purpose.Business, Personal.Male.Single, Job.UnemployedUnskilled, Job.UnskilledResident, and Job.SkilledEmployee
+
+#create new dataset with the selected variables only 
+germancrd <- GermanCredit[,c(1,3,8,29,43,59,60,61)]
+
+train.index <- sample(1:nrow(germancrd), size = 0.7 * nrow(germancrd))
+germancrd <- scale(germancrd[train.index, ])
+```
+
+#2 Use kmeans and komeans
+```{r}
+vaf <- c()
+for (i in 2:10) {
+  vaf[i] <- (kmeans(germancrd[train.index, ], i, nstart = 100))$betweenss / (kmeans(germancrd[train.index, ], i, nstart = 100))$totss
+}
+vaf <- data.frame(cluster=paste("cluster.", 2:10, sep = ""), vaf = vaf[-1])
+vaf
+
+```
+
+
+
+#3 Generate K-means solutions
+```{r}
+train.index <- sample(1:nrow(germancrd), size = 0.7 * nrow(germancrd))
+
+for (i in 2:10) {
+  assign(paste("cluster.", i, sep = ""), kmeans(germancrd[train.index, ], i, nstart = 100))
+}
+
+kmeans.btwss <- c(cluster.2$betweenss, cluster.3$betweenss, cluster.4$betweenss, 
+            cluster.5$betweenss, cluster.6$betweenss, cluster.7$betweenss, 
+            cluster.8$betweenss, cluster.9$betweenss, cluster.10$betweenss)
+kmeans.totss <- c(cluster.2$totss, cluster.3$totss, cluster.4$totss, cluster.5$totss,
+                  cluster.6$totss, cluster.7$totss, cluster.8$totss, cluster.9$totss,
+                  cluster.10$totss)
+kmeans.vaf <- as.matrix(kmeans.btwss/kmeans.totss)
+rownames(kmeans.vaf) <- paste("cluster.", 2:10, sep = "")
+colnames(kmeans.vaf) <- "VAF"
+kmeans.vaf
+```
+
+
+#4 Perform Scree tests to choose the appropriate number of k-mean clusters
+#5 Show the Scree Plot
+```{r}
+plot(2:10, kmeans.vaf, type = "b", xlab = "Number of Clusters", ylab = "VAF")
+# As shown in the graph below, the "elbow" point is at 3 clusters. 
+```
+
+#6 Choose 1 k-means solution
+a) VAF criteria
+As described above, the K-means solution with 3 clusters is the best choice based on VAF criteria
+
+b) Intepretability of segments
+```{r}
+par(mfrow = c(3,3))
+plot(germancrd[train.index,c(1,3)], col = (cluster.2$cluster + 1), main = "2 Clusters")
+plot(germancrd[train.index,c(1,3)], col = (cluster.3$cluster + 1), main = "3 Clusters")
+plot(germancrd[train.index,c(1,3)], col = (cluster.4$cluster + 1), main = "4 Clusters")
+plot(germancrd[train.index,c(1,3)], col = (cluster.5$cluster + 1), main = "5 Clusters")
+plot(germancrd[train.index,c(1,3)], col = (cluster.6$cluster + 1), main = "6 Clusters")
+plot(germancrd[train.index,c(1,3)], col = (cluster.7$cluster + 1), main = "7 Clusters")
+plot(germancrd[train.index,c(1,3)], col = (cluster.8$cluster + 1), main = "8 Clusters")
+plot(germancrd[train.index,c(1,3)], col = (cluster.9$cluster + 1), main = "9 Clusters")
+plot(germancrd[train.index,c(1,3)], col = (cluster.10$cluster + 1), main = "10 Clusters")
+```
+Based on the graphs shown above, 
+
+
+c) Goodness of fit in holdout
+```{r}
+kmeans.centers <- list(cluster.2$centers, cluster.3$centers, cluster.4$centers, 
+                       cluster.5$centers, cluster.6$centers, cluster.7$centers, 
+                       cluster.8$centers, cluster.9$centers, cluster.10$centers)
+
+for (i in 2:10) {
+  assign(paste("test.cluster.", i, sep = ""), kmeans(germancrd[-train.index, ], 
+                          centers = kmeans.centers[[i - 1]], i))
+}
+
+kmeans.btwss.test <- c(test.cluster.2$betweenss, test.cluster.3$betweenss, 
+                       test.cluster.4$betweenss, test.cluster.5$betweenss, 
+                       test.cluster.6$betweenss, test.cluster.7$betweenss,
+                       test.cluster.8$betweenss, test.cluster.9$betweenss, 
+                       test.cluster.10$betweenss)
+kmeans.totss.test <- c(test.cluster.2$totss, test.cluster.3$totss, test.cluster.4$totss, 
+                       test.cluster.5$totss, test.cluster.6$totss, test.cluster.7$totss, 
+                       test.cluster.8$totss, test.cluster.9$totss, test.cluster.10$totss)
+kmeans.vaf.test <- as.matrix(kmeans.btwss.test / kmeans.totss.test)
+rownames(kmeans.vaf.test) <- paste("test.cluster.", 2:10, sep = "")
+colnames(kmeans.vaf.test) <- "VAF"
+kmeans.vaf.test
+```
+
+
+#7 Generate 3-5 komeans clusters
+```{r}
+for (i in 3:5) {
+  assign(paste("komeans.", i, sep = ""), 
+         komeans(data = germancrd[train.index, ], nclust = i, 
+                        lnorm = 2, nloops = 50, tolerance = 0.00001, seed = 666))
+}
+
+komeans.vaf <- as.matrix(c(komeans.3$VAF, komeans.4$VAF,komeans.5$VAF))
+rownames(komeans.vaf) <- paste("komeans.", 3:5, sep = "")
+colnames(komeans.vaf) <- "VAF"
+komeans.vaf
+```
+
+#8 Compare the chosen k-means solution with a komeans solution from an interpretability perspective
+
+
+#9 Summarized your result and interpret the cluster you choose as final solution
+
+#10 Recruiting for 30 people
+
+a) what approach will you take to recruit people over the telephone?
+
+b) Which customer will you try to recruit?
+
+c) How will you identify if a new recruit belongs to a particular segment?
+

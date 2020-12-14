@@ -1,0 +1,257 @@
+---
+title: "DM Assignment 5"
+author: "Yunshuang Jiang"
+date: "2/28/2020"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Part 1\
+&nbsp;
+&nbsp;
+Q1. Load data \
+```{r}
+library(caret)
+data("GermanCredit")
+germancr <- GermanCredit[, 1:7]
+germancr <- germancr[, c(2, 1, 3, 4, 5, 6, 7)]
+head(germancr)
+set.seed(101)
+index.train <- sample(1:nrow(germancr), size = 0.7 * nrow(germancr))
+Train <- germancr[index.train, ]
+Holdout <- germancr[-index.train, ]
+```
+
+Q2. Perform cluster-wise regression model on trianing data\
+```{r}
+clustreg=function(dat,k,tries,sed,niter)
+{
+
+set.seed(sed)
+dat=as.data.frame(dat)
+rsq=rep(NA,niter)
+res=list()
+rsq.best=0
+    for(l in 1:tries) 
+    {
+
+	c = sample(1:k,nrow(dat),replace=TRUE)
+	yhat=rep(NA,nrow(dat))
+	for(i in 1:niter) 
+	{		
+		resid=pred=matrix(0,nrow(dat),k)
+		for(j in 1:k)
+		{	
+			pred[,j]=predict(glm(dat[c==j,],family="gaussian"),newdata=dat)		
+			resid[,j] = (pred[,j]-dat[,1])^2
+		}
+
+	c = apply(resid,1,which.min)
+	for(m in 1:nrow(dat)) {yhat[m]=pred[m,c[m]]}
+	rsq[i] = cor(dat[,1],yhat)^2	
+	}
+	
+	if(rsq[niter] > rsq.best) 
+		{	
+		rsq.best=rsq[niter]
+		l.best=l
+            	c.best=c
+		yhat.best=yhat
+		}
+    }
+
+    res=list("Complete")
+    for(i in k:1) {res=list(summary(lm(dat[c.best==i,])),res)}
+	
+    return(list(data=dat,nclust=k,tries=tries,seed=sed,rsq.best=rsq.best,number.loops=niter, Best.try=l.best,cluster=c.best,results=res))
+}
+
+clustreg.predict=function(results,newdat){
+
+	yhat=rep(NA,nrow(newdat))
+	resid=pred=matrix(0,nrow(newdat),length(table(results$cluster)))
+		
+		for(j in 1:length(table(results$cluster))){			
+			pred[,j]=predict(glm(results$data[results$cluster==j,],family="gaussian"),newdata=newdat)		
+			resid[,j] = (pred[,j]-newdat[,1])^2
+		}
+
+	c = apply(resid,1,which.min)
+	for(m in 1:nrow(newdat)) {yhat[m]=pred[m,c[m]]}
+	rsq = cor(newdat[,1],yhat)^2	
+
+return(list(results=results,newdata=newdat,cluster=c,yhat=yhat,rsq=rsq))
+
+}
+
+
+germancr1 <- clustreg(dat = Train,k = 1,tries = 1,sed = 10101,niter = 1)
+germancr2 <- clustreg(dat = Train,k = 2,tries = 2,sed = 10101,niter = 10)
+germancr3 <- clustreg(dat = Train,k = 3,tries = 2,sed = 10101,niter = 10)
+rsq1 <- germancr1$rsq.best
+rsq2 <- germancr2$rsq.best
+rsq3 <- germancr3$rsq.best
+rsqtotal <- c(rsq1, rsq2, rsq3)
+rsqtotal
+par(mfrow = c(1, 1))
+plot(1 : 3, rsqtotal, main = "Scree Plot for Cluster-wise regression",
+xlab = "Number of Clusters", ylab = "R-Squared", type = "l", col = "11")
+```
+
+Q3.Perform holdout validation testing \
+```{r}
+germancr1.test <- clustreg.predict(germancr1, Holdout)
+germancr2.test <- clustreg.predict(germancr2, Holdout)
+germancr3.test <- clustreg.predict(germancr3, Holdout)
+rsq.test <- c(germancr1.test$rsq, germancr2.test$rsq,
+              germancr3.test$rsq)
+rsq.test
+
+rsq.compare <- c((germancr1$rsq.best - germancr1.test$rsq)/germancr1$rsq.best,
+                 (germancr2$rsq.best - germancr2.test$rsq)/germancr2$rsq.best,
+                 (germancr3$rsq.best - germancr3.test$rsq)/germancr3$rsq.best)
+rsq.compare
+```
+
+Q4 & Q5.Choose a model and summarize your result.\
+```{r}
+germancr1$results
+germancr2$results
+germancr3$results
+```
+
+From training result, we can the performance of clusterreg2 increases significantly as compare to clusterreg1: r-square increased from 0.53 to 0.84. The performance of clusterreg3 has the highest r-square of 0.898, however, as compare to clusterreg2, the increase in r-square is not as signficant.\
+
+The testing result is similar to training result such that the performance of clusterreg3 has a highest r-square, but the increase in r-square from clusterreg2 to 3 is not as significant as compared to the increase from clusterreg1 to 2.\
+
+As for the change from training to testing in r-squared, all training r-squareds are higher than testing r-squared for all clusterreg, with clusterreg1 being the highest. The changes for clusterreg2 and 3 are very similar.\
+
+Since there is no significant difference between the numbers of significant coefficients, I decided to choose clusterreg3 based on the training and testing r-squared. \
+
+&nbsp;
+&nbsp;
+&nbsp;
+&nbsp;
+
+Part 2\
+&nbsp;
+&nbsp;
+Q1. Load data\
+```{r}
+library(caret)
+data("GermanCredit")
+set.seed(101)
+train.index <- sample(1:nrow(GermanCredit), size = 0.7 * nrow(GermanCredit))
+train <- GermanCredit[train.index, ]
+holdout <- GermanCredit[-train.index, ]
+```
+
+Q2. Fit LDA and QDA model using training data\
+```{r}
+library(MASS)
+ldatrain <- lda(train$Class ~ Duration + Amount + InstallmentRatePercentage + 
+    Age + NumberExistingCredits + ForeignWorker + CheckingAccountStatus.lt.0 + 
+    CheckingAccountStatus.0.to.200 + CheckingAccountStatus.gt.200 + 
+    CreditHistory.NoCredit.AllPaid + CreditHistory.ThisBank.AllPaid + 
+    CreditHistory.PaidDuly + CreditHistory.Delay + Purpose.NewCar + 
+    Purpose.Furniture.Equipment + Purpose.Radio.Television + 
+    Purpose.Repairs + Purpose.Education + Purpose.Business + 
+    SavingsAccountBonds.lt.100 + SavingsAccountBonds.100.to.500 + 
+    SavingsAccountBonds.500.to.1000 + EmploymentDuration.1.to.4 + 
+    EmploymentDuration.4.to.7 + EmploymentDuration.gt.7 + Personal.Female.NotSingle + 
+    OtherInstallmentPlans.Bank,data=train)
+
+qdatrain <- qda(train$Class ~ Duration + Amount + InstallmentRatePercentage + 
+    Age + NumberExistingCredits + ForeignWorker + CheckingAccountStatus.lt.0 + 
+    CheckingAccountStatus.0.to.200 + CheckingAccountStatus.gt.200 + 
+    CreditHistory.NoCredit.AllPaid + CreditHistory.ThisBank.AllPaid + 
+    CreditHistory.PaidDuly + CreditHistory.Delay + Purpose.NewCar + 
+    Purpose.Furniture.Equipment + Purpose.Radio.Television + 
+    Purpose.Repairs + Purpose.Education + Purpose.Business + 
+    SavingsAccountBonds.lt.100 + SavingsAccountBonds.100.to.500 + 
+    SavingsAccountBonds.500.to.1000 + EmploymentDuration.1.to.4 + 
+    EmploymentDuration.4.to.7 + EmploymentDuration.gt.7 + Personal.Female.NotSingle + 
+    OtherInstallmentPlans.Bank,data=train)
+
+ldapred <- predict(ldatrain)$class
+cmlda <- confusionMatrix(data=as.factor(as.integer(ldapred)), as.factor(as.integer(train$Class)))
+
+qdapred<- predict(qdatrain)$class
+cmqda <- confusionMatrix(data=as.factor(as.integer(qdapred)), as.factor(as.integer(train$Class)))
+
+cmlda
+cmqda
+```
+
+Q3. Perform Holdout validation testing\
+```{r}
+ldapred.test <- predict(ldatrain, newdata = holdout)$class
+cmlda.test <- confusionMatrix(data=as.factor(as.integer(ldapred.test)), as.factor(as.integer(holdout$Class)))
+
+qdapred.test<- predict(qdatrain, newdata = holdout)$class
+cmqda.test <- confusionMatrix(data=as.factor(as.integer(qdapred.test)), as.factor(as.integer(holdout$Class)))
+cmlda.test
+cmqda.test
+```
+
+Q4. Ensemble Model\
+```{r}
+library(readr)
+glm.fit.pred <- read.table("~/Desktop/glm.fit.pred.csv", quote="\"", comment.char="")
+glm.fit.holdout <- read.table(file = "~/Desktop/glm.fit.holdout.csv",quote="\"", comment.char="")
+tree.fit.pred <- read.table(file = "~/Desktop/tree.fit.pred.csv",quote="\"", comment.char="")
+tree.fit.holdout <- read_csv("tree.fit.holdout.csv", col_names = FALSE)
+
+glm.fit.pred <- ifelse(glm.fit.pred==0, "Bad","Good")
+glm.fit.holdout <- ifelse(glm.fit.holdout==0, "Bad","Good")
+
+ensemble.train <- rep(NA, 700)
+ensemble.test <- rep(NA, 300)
+combined.train <- data.frame(glm.fit.pred,tree.fit.pred,ldapred,qdapred,ensemble.train)
+combined.test <- data.frame(glm.fit.holdout,tree.fit.holdout,ldapred.test,qdapred.test,ensemble.test)
+
+
+ensemble.model <- function(x) 
+{
+  for (i in 1 : nrow(x)) 
+  { goodcount <- 0
+    badcount <- 0
+    for (j in 1 : (ncol(x) - 1)) {
+      if (x[i, j] == 'Good') {
+        goodcount <- goodcount + 1
+      } else { badcount <- badcount + 1}
+    } 
+    if (goodcount > badcount) {
+      x[i, ncol(x)] = 'Good'
+    } else if(goodcount < badcount){
+      x[i, ncol(x)] = 'Bad'
+      } else {
+      x[i, ncol(x)] = sample(c("Good","Bad"), size = 1)}
+  }
+  return(x[, ncol(x)])
+}
+
+combined.train[,5] <- ensemble.model(combined.train)
+combined.test[,5] <- ensemble.model(combined.test)
+head(combined.train)
+head(combined.test)
+
+cmensemble.train <- confusionMatrix(data=as.factor(combined.train[,5]), as.factor(train$Class))
+cmensemble.test <- confusionMatrix(data=as.factor(combined.test[,5]), as.factor(holdout$Class))
+cmensemble.train
+cmensemble.test
+
+```
+
+Q5. Summary.\
+Q5.1: For LDA and QDA: 
+In our training dataset, both the LDA and QDA perform pretty well. The accuracy rate for LDA model(78.71%) is slightly lower than the accuracy rate for QDA model (81.86%). For our testing dataset, the accuracy rate for both model is slightly lower as compared to the training dataset (74.33% for LDA and 75% for QDA). In addition, the QDA model has a higher negative prediction rate for both training and testing dataset as compare to the LDA model (for training, 87.07% as compare to 82.12%, and for testing, 80.18% as compare to 77.45%). To summarize, the QDA model performs better for both overall accuracy rate as well as negative prediction rate.\
+
+Q5.2: For ensemble model: 
+The training accuracy rate for the ensemble model is 79.43% and the testing accuracy rate is 75%. Even though the training acuracy rate for the ensemble model is slightly lower than the QDA model, the ensemble model has the highest accuracy rate for testing data. This makes sense because the ensemble model is an average of all the predictions from four different models, which shouuld yield the most stable prediction for the testing data.\ 
+
+
+
